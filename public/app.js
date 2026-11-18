@@ -139,7 +139,7 @@ function render(activations, rms, ms) {
   }
   els.status.textContent = weight < 0.25
     ? 'Passage calme : résultat conservé'
-    : `Analyse en direct · ${ms} ms`;
+    : 'Analyse en direct';
 
   // Activations indépendantes (sigmoïdes) : % = confiance du modèle, barre relative au 1er.
   els.ranking.replaceChildren(...top.map(([v, i]) => {
