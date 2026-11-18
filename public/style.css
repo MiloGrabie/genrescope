@@ -103,15 +103,19 @@ header h1 span {
   .icon-btn { width: 40px; height: 40px; }
 }
 
-/* Message temporaire (ex. : instructions d'installation sur iPhone) */
+/* Message temporaire, en bas au-dessus du bouton Écouter (position calculée en JS).
+   Toucher ou glisser sur le côté / vers le bas pour le fermer. */
 .toast {
   position: fixed;
   left: 16px;
   right: 16px;
-  top: max(72px, calc(env(safe-area-inset-top) + 64px));
+  bottom: 120px;
   max-width: 448px;
   margin: 0 auto;
   z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   background: var(--paper);
   color: var(--text);
   border: var(--border);
@@ -120,8 +124,29 @@ header h1 span {
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.4;
+  touch-action: none;           /* le glissement est géré par l'appli */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  transition: transform 0.25s ease, opacity 0.25s ease;
 }
+.toast > span { flex: 1; }
 .toast[hidden] { display: none; }
+.toast.show { animation: toast-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes toast-in { from { transform: translateY(40px); opacity: 0; } }
+.toast-action {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font: 700 0.85rem "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  background: var(--yellow);
+  color: var(--on-color);
+  border: 3px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.toast-action:active { transform: translate(3px, 3px); box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .toast, .toast.show { transition: none; animation: none; } }
 
 /* Pile de cartes : direct au-dessus, analyses passées derrière (glisser ou toucher).
    Seule la carte du dessus occupe de la place : celles du fond (et celles qui partent ou

@@ -39,7 +39,7 @@ const stack = createStack({
   root: $('stack'),
   liveCard: $('liveCard'),
   onShow: (entry) => renderRanking(entry ? entry.top : liveTop),
-  onDelete: (restore) => toast('Analyse supprimée · touche ici pour annuler', restore),
+  onDelete: (restore) => toast('Analyse supprimée', restore),
 });
 
 const worker = new Worker('./worker.js', { type: 'module' });
@@ -308,20 +308,78 @@ const isStandalone = () => matchMedia('(display-mode: standalone)').matches || n
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+// --- Message temporaire, en bas de l'écran ------------------------------------
+// Toucher le message ou le faire glisser (côté ou bas) le ferme ; « Annuler » lance l'action.
 let toastTimer = 0;
-let toastAction = null;
 function toast(text, action = null) {
-  els.toast.textContent = text;
-  els.toast.hidden = false;
-  toastAction = action;
+  const t = els.toast;
+  const msg = Object.assign(document.createElement('span'), { textContent: text });
+  t.replaceChildren(msg);
+  if (action) {
+    const undo = Object.assign(document.createElement('button'), { type: 'button', className: 'toast-action', textContent: 'Annuler' });
+    undo.addEventListener('click', (e) => { e.stopPropagation(); hideToast(); action(); });
+    t.append(undo);
+  }
+  // Juste au-dessus du bouton Écouter, quelle que soit la hauteur de l'écran
+  t.style.bottom = `${Math.max(16, innerHeight - els.listen.getBoundingClientRect().top + 16)}px`;
+  t.style.transition = 'none';
+  t.style.transform = '';
+  t.style.opacity = '';
+  t.hidden = false;
+  t.classList.remove('show');
+  void t.offsetWidth;
+  t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { els.toast.hidden = true; toastAction = null; }, action ? 5000 : 7000);
+  toastTimer = setTimeout(hideToast, action ? 6000 : 8000);
 }
-els.toast.addEventListener('click', () => {
-  els.toast.hidden = true;
-  toastAction?.();
-  toastAction = null;
-});
+/** Ferme le message en le faisant sortir (dx, dy : direction du geste). */
+function hideToast(dx = 0, dy = 1) {
+  const t = els.toast;
+  clearTimeout(toastTimer);
+  if (t.hidden) return;
+  t.style.transition = '';
+  t.style.transform = Math.abs(dx) > Math.abs(dy)
+    ? `translateX(${Math.sign(dx) * 120}%)`
+    : 'translateY(150%)';
+  t.style.opacity = '0';
+  setTimeout(() => { if (t.style.opacity === '0') t.hidden = true; }, 250);
+}
+{
+  let drag = null;
+  els.toast.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0, moved: false };
+    try { els.toast.setPointerCapture(e.pointerId); } catch { /* pointeur déjà relâché */ }
+    els.toast.style.transition = 'none';
+    clearTimeout(toastTimer); // ne disparaît pas pendant qu'on le tient
+  });
+  els.toast.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.dx = e.clientX - drag.x;
+    drag.dy = Math.max(0, e.clientY - drag.y); // vers le bas seulement
+    if (Math.hypot(drag.dx, drag.dy) > 6) drag.moved = true;
+    const dist = Math.abs(drag.dx) > drag.dy ? drag.dx : drag.dy;
+    els.toast.style.transform = Math.abs(drag.dx) > drag.dy ? `translateX(${dist}px)` : `translateY(${dist}px)`;
+    els.toast.style.opacity = String(Math.max(0.2, 1 - Math.abs(dist) / 200));
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { dx, dy, moved, t } = drag;
+    drag = null;
+    const dist = Math.max(Math.abs(dx), dy);
+    const fast = dist / (performance.now() - t) > 0.4 && dist > 20;
+    if (!moved && e.type === 'pointerup') hideToast(0, 1);                    // simple toucher
+    else if (e.type === 'pointerup' && (dist > 60 || fast)) hideToast(dx, dy); // glissé assez loin
+    else {                                                                     // revient en place
+      els.toast.style.transition = '';
+      els.toast.style.transform = '';
+      els.toast.style.opacity = '';
+      toastTimer = setTimeout(hideToast, 4000);
+    }
+  };
+  els.toast.addEventListener('pointerup', end);
+  els.toast.addEventListener('pointercancel', end);
+}
 
 // Chrome / Edge / Android : le navigateur fournit l'invite d'installation
 window.addEventListener('beforeinstallprompt', (e) => {
