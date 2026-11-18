@@ -109,6 +109,7 @@ function resetResults() {
   els.family.textContent = '';
   els.style.textContent = 'Écoute…';
   els.ranking.replaceChildren();
+  $('about').hidden = true; // la description laisse la place aux résultats
 }
 
 async function start() {
@@ -216,10 +217,20 @@ const OFFLINE_ASSETS = [
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* facultatif */ });
 }
-/** Demande au service worker de garder le modèle en cache (dès la 1re visite). */
+/** Demande au service worker de garder le modèle en cache (dès la 1re visite),
+ *  puis affiche « fonctionne hors ligne » une fois que tout y est vraiment. */
 function cacheForOffline() {
-  navigator.serviceWorker?.ready.then((reg) => {
-    reg.active?.postMessage({ type: 'cache-assets', urls: OFFLINE_ASSETS.map((u) => new URL(u, location.href).href) });
+  const urls = OFFLINE_ASSETS.map((u) => new URL(u, location.href).href);
+  navigator.serviceWorker?.ready.then(async (reg) => {
+    reg.active?.postMessage({ type: 'cache-assets', urls });
+    for (let i = 0; i < 20; i++) {
+      try {
+        const cache = await caches.open('genrescope-assets-v1');
+        const hits = await Promise.all(urls.map((u) => cache.match(u)));
+        if (hits.every(Boolean)) { $('offline').hidden = false; return; }
+      } catch { return; }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   });
 }
 

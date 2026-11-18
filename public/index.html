@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#fff4e0">
   <title>GenreScope</title>
+  <meta name="description" content="Détecte en direct le style de la musique captée par le micro, parmi 400 sous-genres, même pour un morceau inconnu. 100 % local.">
+
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -37,6 +39,7 @@
     <section class="result" aria-live="polite">
       <p class="family" id="family"></p>
       <p class="style" id="style">Prêt à écouter</p>
+      <p class="about" id="about">Détecte en direct le style de la musique que ton téléphone entend, parmi 400 sous-genres. Même un morceau inconnu : pas besoin qu'il soit référencé.</p>
       <p class="status" id="status">Chargement du modèle…</p>
       <div class="progress" id="progress"><div id="progressBar"></div></div>
     </section>
@@ -50,7 +53,7 @@
     </button>
 
     <footer>
-      100&nbsp;% local, aucun son envoyé · Modèle
+      100&nbsp;% local, aucun son envoyé<span id="offline" hidden> · fonctionne hors ligne</span> · Modèle
       <a href="https://essentia.upf.edu/models.html" target="_blank" rel="noopener">Discogs-EffNet</a>
       (MTG-UPF, CC&nbsp;BY-NC-SA)
     </footer>
