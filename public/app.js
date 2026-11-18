@@ -225,8 +225,9 @@ function stop() {
   audio = null;
   els.listen.setAttribute('aria-pressed', 'false');
   els.listenLabel.textContent = 'Écouter';
-  els.status.textContent = session?.entry
+  els.status.textContent = session?.entry && stack.hasPast()
     ? 'Enregistré · glisse la carte pour voir l\'historique'
+    : session?.entry ? 'Enregistré · réappuie pour analyser un autre morceau'
     : 'En pause · réappuie pour analyser un autre morceau';
   stack.save();
   session = null;

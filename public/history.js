@@ -1,7 +1,8 @@
 // Historique des analyses : stockage sur l'appareil + pile de cartes.
 // Carte du dessus = analyse en direct ; derrière, les analyses passées (de la plus récente
-// à la plus ancienne). Glisser à gauche ou toucher → carte suivante (plus ancienne),
-// glisser à droite → carte précédente. Clavier : ← → et Début.
+// à la plus ancienne). Glisser à gauche ou toucher → la carte part à gauche et dévoile la
+// suivante (plus ancienne) ; glisser à droite → la carte précédente revient de la gauche,
+// sous le doigt. Clavier : → suivante, ← précédente, Début : retour au direct.
 
 const KEY = 'history';
 const MAX_ENTRIES = 500;   // ~300 octets par analyse : ~150 Ko au maximum, pas besoin de purge par date
@@ -16,22 +17,21 @@ function load() {
   } catch { return []; }
 }
 
-const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
-function ago(t) {
-  const s = (Date.now() - t) / 1000;
-  let text;
-  if (s < 60) text = 'à l\'instant';
-  else if (s < 3600) text = rtf.format(-Math.round(s / 60), 'minute');
-  else if (s < 86400) text = rtf.format(-Math.round(s / 3600), 'hour');
-  else text = rtf.format(-Math.round(s / 86400), 'day');
-  return text[0].toUpperCase() + text.slice(1);
-}
 function duration(ms) {
   const s = Math.max(1, Math.round(ms / 1000));
   return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`;
 }
+/** « Aujourd'hui, 21:04 », « Hier, 21:04 », « Lundi, 21:04 » ou « 12 nov., 21:04 ». */
 function when(t) {
-  return new Date(t).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const d = new Date(t);
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / 86400000);
+  let day;
+  if (days === 0) day = 'Aujourd\'hui';
+  else if (days === 1) day = 'Hier';
+  else if (days < 7) day = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+  else day = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: days > 300 ? 'numeric' : undefined });
+  return `${day[0].toUpperCase()}${day.slice(1)}, ${time}`;
 }
 
 /**
@@ -56,104 +56,110 @@ export function createStack({ root, liveCard, onShow, onDelete }) {
     try { localStorage.setItem(KEY, JSON.stringify(history.slice(0, MAX_ENTRIES))); } catch { /* stockage plein ou indisponible */ }
   }
 
-  function build(entry) {
-    const el = document.createElement('section');
+  function cardFor(key) {
+    let el = cards.get(key);
+    if (el) return el;
+    const entry = entryOf(key);
+    el = document.createElement('section');
     el.className = 'result card past';
-    const [best] = entry.top;
     el.innerHTML = `
-      <div class="card-top"><p class="family"></p><span class="count"></span>
+      <div class="card-top"><p class="family"></p>
         <button class="del" type="button" aria-label="Supprimer cette analyse" title="Supprimer">×</button></div>
       <p class="style"></p>
-      <p class="when"></p>
       <p class="status"></p>`;
-    el.querySelector('.family').textContent = best.genre;
-    el.querySelector('.style').textContent = best.style;
-    el.querySelector('.when').textContent = when(entry.start);
+    el.querySelector('.family').textContent = entry.top[0].genre;
+    el.querySelector('.style').textContent = entry.top[0].style;
     el.querySelector('.del').addEventListener('click', () => remove(entry));
+    cards.set(key, el);
     return el;
   }
 
-  /** Place les cartes visibles dans la pile. `enter` : direction d'arrivée de la nouvelle carte du dessus. */
+  /** Place les cartes visibles dans la pile. `enter` : côté d'où arrive la nouvelle carte du dessus. */
   function layout(enter = 0) {
     const all = keys();
     index = Math.min(Math.max(index, 0), all.length - 1);
     const visible = all.slice(index, index + VISIBLE);
     for (const [key, el] of cards) {
-      if (visible.includes(key) || el.classList.contains('leaving')) continue;
+      if (visible.includes(key) || el.classList.contains('leaving') || el.classList.contains('incoming')) continue;
       el.remove();
       if (key !== 'live') cards.delete(key);
     }
     visible.forEach((key, depth) => {
-      let el = cards.get(key);
-      if (!el) { el = build(entryOf(key)); cards.set(key, el); }
-      el.classList.remove('leaving');
-      const isNew = !el.isConnected;
+      const el = cardFor(key);
+      el.classList.remove('leaving', 'incoming');
       el.dataset.depth = depth;
       el.style.zIndex = String(VISIBLE - depth);
       el.inert = depth > 0;
-      if (isNew) {
+      if (!el.isConnected) {
         root.append(el);
         if (depth === 0 && enter) {
           // Arrive de l'extérieur de l'écran puis glisse à sa place
           el.style.transition = 'none';
-          el.style.transform = `translateX(${enter * 120}%) rotate(${enter * 10}deg)`;
+          el.style.transform = offscreen(enter);
           void el.offsetWidth;
-          el.style.transition = '';
         }
       }
+      el.style.transition = '';
       el.style.transform = '';
-      const count = el.querySelector('.count');
-      count.textContent = all.length > 1 ? `${index + depth + 1} / ${all.length}` : '';
-      const entry = entryOf(key);
-      // Couleurs en alternance : deux cartes voisines ne se ressemblent jamais
-      if (entry) el.style.setProperty('--card-bg', COLORS[(index + depth - 1) % COLORS.length]);
-      if (entry) el.querySelector('.status').textContent = `${ago(entry.end)} · écouté ${duration(entry.end - entry.start)}`;
+      paint(el, key, index + depth);
     });
     root.classList.toggle('has-history', all.length > 1);
     onShow(entryOf(visible[0]));
   }
 
-  /** Fait sortir la carte du dessus de l'écran (dir : -1 gauche, 1 droite). */
-  function throwOut(dir) {
-    const key = keys()[index];
+  /** Couleur (en alternance : deux cartes voisines ne se ressemblent jamais) et date. */
+  function paint(el, key, pos) {
+    const entry = entryOf(key);
+    if (!entry) return;
+    el.style.setProperty('--card-bg', COLORS[(pos - 1) % COLORS.length]);
+    el.querySelector('.status').textContent = `${when(entry.start)} · écouté ${duration(entry.end - entry.start)}`;
+  }
+
+  const offscreen = (dir) => `translateX(${dir * 130}%) rotate(${dir * 14}deg)`;
+
+  /** Fait sortir une carte de l'écran (dir : -1 gauche, 1 droite) puis la retire de la pile. */
+  function throwOut(key, dir) {
     const el = cards.get(key);
     if (!el) return;
+    el.classList.remove('incoming');
     el.classList.add('leaving');
     el.inert = true;
-    el.style.transform = `translateX(${dir * 130}%) rotate(${dir * 14}deg)`;
+    el.style.transition = '';
+    el.style.transform = offscreen(dir);
     const done = () => {
       if (!el.classList.contains('leaving')) return; // revenue dans la pile entre-temps
       el.classList.remove('leaving');
-      el.style.transform = '';
       el.remove();
       if (key !== 'live' && cards.get(key) === el) cards.delete(key);
     };
     el.addEventListener('transitionend', done, { once: true });
-    setTimeout(done, 400); // au cas où la transition n'a pas lieu (animations réduites)
+    setTimeout(done, 450); // au cas où la transition n'a pas lieu (animations réduites)
   }
 
-  function next(dir = -1) {
-    const total = keys().length;
-    if (total < 2) return;
-    throwOut(dir);
-    if (index < total - 1) { index++; layout(); } else { index = 0; layout(-dir); } // fin : retour au direct
+  /** Carte suivante (plus ancienne) ; après la dernière, retour au direct. */
+  function next() {
+    const all = keys();
+    if (all.length < 2) return;
+    throwOut(all[index], -1);
+    if (index < all.length - 1) { index++; layout(); } else { index = 0; layout(-1); }
   }
+  /** Carte précédente : revient de la gauche, là où elle était partie. */
   function prev() {
-    if (index === 0) { snapBack(); return; }
-    const el = front();
+    if (index === 0) return;
     index--;
-    layout(1);
-    if (el) el.style.transform = '';
+    layout(-1);
   }
-  function snapBack() {
-    const el = front();
-    if (el) { el.style.transition = ''; el.style.transform = ''; }
+  function goTo(i) {
+    if (i === index) return;
+    throwOut(keys()[index], -1);
+    index = i;
+    layout(-1);
   }
 
   function remove(entry) {
     const pos = history.indexOf(entry);
     if (pos < 0) return;
-    throwOut(-1);
+    throwOut(String(entry.id), -1);
     history.splice(pos, 1);
     dirty = true;
     save();
@@ -167,46 +173,74 @@ export function createStack({ root, liveCard, onShow, onDelete }) {
   }
 
   // --- Glisser / toucher -------------------------------------------------------
+  // « push » : la carte du dessus suit le doigt vers la gauche (carte suivante).
+  // « pull » : vers la droite, la carte précédente revient de la gauche sous le doigt ;
+  //            la carte du dessus ne bouge pas.
   let drag = null;
   root.addEventListener('pointerdown', (e) => {
     const el = front();
     if (!el || e.button > 0 || !el.contains(e.target) || e.target.closest('button, a')) return;
-    drag = { el, id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, moving: false };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, mode: null };
   });
   root.addEventListener('pointermove', (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (!drag.moving) {
+    if (!drag.mode) {
       if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
       if (Math.abs(dx) < 8 || keys().length < 2) return;
-      drag.moving = true;
-      root.setPointerCapture(e.pointerId);
+      try { root.setPointerCapture(e.pointerId); } catch { /* pointeur déjà relâché */ }
+      if (dx > 0 && index > 0) {
+        drag.mode = 'pull';
+        drag.el = cardFor(keys()[index - 1]);
+        paint(drag.el, keys()[index - 1], index - 1);
+        drag.el.classList.remove('leaving');
+        drag.el.classList.add('incoming');
+        drag.el.dataset.depth = 0;
+        drag.el.style.zIndex = String(VISIBLE + 1);
+        if (!drag.el.isConnected) root.append(drag.el);
+      } else {
+        drag.mode = 'push';
+        drag.el = front();
+      }
       drag.el.style.transition = 'none';
     }
-    // À la carte en direct, glisser à droite résiste (rien avant elle)
-    drag.dx = index === 0 && dx > 0 ? dx * 0.25 : dx;
-    drag.el.style.transform = `translateX(${drag.dx}px) rotate(${drag.dx / 18}deg)`;
+    if (drag.mode === 'pull') {
+      // La carte part de hors écran (à gauche) et rejoint sa place quand le doigt a parcouru la largeur
+      const w = root.offsetWidth * 1.3;
+      drag.dx = Math.max(0, Math.min(dx, w));
+      const x = drag.dx - w;
+      drag.el.style.transform = `translateX(${x}px) rotate(${(x / w) * 14}deg)`;
+    } else {
+      // À la carte en direct, glisser à droite résiste (rien avant elle)
+      drag.dx = index === 0 && dx > 0 ? dx * 0.25 : Math.min(dx, 40);
+      drag.el.style.transform = `translateX(${drag.dx}px) rotate(${drag.dx / 18}deg)`;
+    }
   });
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
-    const { el, dx, moving, t } = drag;
+    const { el, dx, mode, t } = drag;
     drag = null;
-    el.style.transition = '';
-    if (e.type === 'pointercancel') { snapBack(); return; }
-    if (!moving) { next(-1); return; } // simple toucher
+    if (!mode) { if (e.type === 'pointerup') next(); return; } // simple toucher
     const fast = Math.abs(dx) / (performance.now() - t) > 0.5 && Math.abs(dx) > 30;
-    if (dx < 0 && (dx < -SWIPE_PX || fast)) next(-1);
-    else if (dx > 0 && index > 0 && (dx > SWIPE_PX || fast)) prev();
-    else snapBack();
+    const ok = e.type === 'pointerup' && (Math.abs(dx) > SWIPE_PX || fast);
+    if (mode === 'pull') {
+      if (ok) prev();
+      else throwOut(keys()[index - 1], -1); // repart à gauche
+    } else if (ok && dx < 0) {
+      next();
+    } else {
+      el.style.transition = '';
+      el.style.transform = '';
+    }
   };
   root.addEventListener('pointerup', end);
   root.addEventListener('pointercancel', end);
 
   root.addEventListener('keydown', (e) => {
     if (e.target !== root) return;
-    if (e.key === 'ArrowRight') next(-1);
+    if (e.key === 'ArrowRight') next();
     else if (e.key === 'ArrowLeft') prev();
-    else if (e.key === 'Home' && index) { index = 0; layout(1); }
+    else if (e.key === 'Home') goTo(0);
     else return;
     e.preventDefault();
   });
@@ -230,7 +264,9 @@ export function createStack({ root, liveCard, onShow, onDelete }) {
     },
     /** Analyse représentée par la carte en direct (null : nouvelle écoute). */
     setLive(id) { if (liveId !== id) { liveId = id; layout(); } },
-    goLive() { if (index !== 0) { throwOut(-1); index = 0; layout(1); } },
+    goLive: () => goTo(0),
     isLive: () => index === 0,
+    /** Vrai s'il y a au moins une analyse passée derrière la carte en direct. */
+    hasPast: () => keys().length > 1,
   };
 }
