@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b12">
+  <title>GenreScope</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Genre<span>Scope</span></h1>
+      <p class="tagline">Détection du style musical en direct</p>
+    </header>
+
+    <section class="result" aria-live="polite">
+      <p class="family" id="family">&nbsp;</p>
+      <p class="style" id="style">Prêt à écouter</p>
+      <p class="status" id="status">Chargement du modèle…</p>
+      <div class="progress" id="progress"><div id="progressBar"></div></div>
+    </section>
+
+    <ol class="ranking" id="ranking"></ol>
+
+    <canvas id="viz" height="80" aria-hidden="true"></canvas>
+
+    <button id="listen" class="listen" disabled aria-pressed="false">
+      <span class="dot"></span><span id="listenLabel">Écouter</span>
+    </button>
+
+    <footer>
+      Analyse 100&nbsp;% locale, aucun son n'est envoyé. Modèle
+      <a href="https://essentia.upf.edu/models.html" target="_blank" rel="noopener">Discogs-EffNet</a>
+      (MTG-UPF, CC&nbsp;BY-NC-SA&nbsp;4.0).
+    </footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

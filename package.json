@@ -1,0 +1,15 @@
+{
+  "name": "genrescope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "POC : détection de sous-genres musicaux en direct via le micro",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "start": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "essentia.js": "0.1.3",
+    "onnxruntime-web": "1.22.0"
+  }
+}
