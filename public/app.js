@@ -231,18 +231,12 @@ function drawViz() {
     audio.analyser.getByteFrequencyData(data);
     c.clearRect(0, 0, w, h);
     const bars = 48, gap = 2 * dpr, bw = (w - gap * (bars - 1)) / bars;
-    // Barres roses (comme le logo) avec contour ; couleurs relues à chaque image : suit le mode nuit
-    const css = getComputedStyle(document.documentElement);
-    const lw = 1.5 * dpr;
-    c.fillStyle = css.getPropertyValue('--pink').trim();
-    c.strokeStyle = css.getPropertyValue('--line').trim();
-    c.lineWidth = lw;
+    // Barres roses (comme le logo) ; couleur relue à chaque image : suit le mode nuit
+    c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--pink').trim();
     for (let i = 0; i < bars; i++) {
       const v = data[Math.floor((i / bars) ** 1.6 * data.length)] / 255;
-      const bh = Math.max(4 * dpr, v * (h - 8 * dpr));
-      const x = i * (bw + gap), y = h - bh;
-      c.fillRect(x, y, bw, bh);
-      c.strokeRect(x + lw / 2, y + lw / 2, bw - lw, bh - lw);
+      const bh = Math.max(3 * dpr, v * (h - 8 * dpr));
+      c.fillRect(i * (bw + gap), h - bh, bw, bh);
     }
     audio.raf = requestAnimationFrame(loop);
   };
