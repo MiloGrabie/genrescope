@@ -14,7 +14,7 @@ const els = {
   family: $('family'), style: $('style'), status: $('status'),
   progress: $('progress'), progressBar: $('progressBar'),
   ranking: $('ranking'), viz: $('viz'), listen: $('listen'), listenLabel: $('listenLabel'),
-  theme: $('theme'),
+  theme: $('theme'), install: $('install'), toast: $('toast'),
 };
 
 let labels = [];
@@ -35,6 +35,7 @@ worker.onmessage = ({ data }) => {
       els.progress.classList.add('hidden');
       els.status.textContent = 'Appuie sur « Écouter » près d\'une source musicale';
       els.listen.disabled = false;
+      cacheForOffline();
       break;
     case 'silence':
       if (audio) {
@@ -207,10 +208,59 @@ els.theme.addEventListener('click', () => {
 darkQuery.addEventListener('change', applyTheme);
 applyTheme();
 
-// Service worker : installation comme appli + fonctionnement hors ligne
+// --- Service worker : installation comme appli + fonctionnement hors ligne ---
+const OFFLINE_ASSETS = [
+  './models/discogs-effnet-bsdynamic-1.onnx', './models/labels.json',
+  './vendor/ort.wasm.min.mjs', './vendor/ort-wasm-simd-threaded.mjs', './vendor/ort-wasm-simd-threaded.wasm',
+];
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* facultatif */ });
 }
+/** Demande au service worker de garder le modèle en cache (dès la 1re visite). */
+function cacheForOffline() {
+  navigator.serviceWorker?.ready.then((reg) => {
+    reg.active?.postMessage({ type: 'cache-assets', urls: OFFLINE_ASSETS.map((u) => new URL(u, location.href).href) });
+  });
+}
+
+// --- Bouton d'installation ---------------------------------------------------
+let installPrompt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+let toastTimer = 0;
+function toast(text) {
+  els.toast.textContent = text;
+  els.toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { els.toast.hidden = true; }, 7000);
+}
+els.toast.addEventListener('click', () => { els.toast.hidden = true; });
+
+// Chrome / Edge / Android : le navigateur fournit l'invite d'installation
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  els.install.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  els.install.hidden = true;
+});
+// iPhone / iPad : pas d'invite automatique, on affiche la marche à suivre
+if (isIOS && !isStandalone()) els.install.hidden = false;
+
+els.install.addEventListener('click', async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') els.install.hidden = true;
+    installPrompt = null;
+  } else if (isIOS) {
+    toast('Pour installer : touche le bouton Partager ⬆︎ de Safari, puis « Sur l\'écran d\'accueil ».');
+  }
+});
 
 els.listen.addEventListener('click', () => (audio ? stop() : start()));
 document.addEventListener('visibilitychange', () => {

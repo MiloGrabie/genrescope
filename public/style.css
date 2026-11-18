@@ -93,7 +93,8 @@ header h1 span {
   transform: rotate(-3deg);
   box-shadow: var(--shadow-sm);
 }
-.theme {
+.actions { display: flex; gap: 10px; flex-shrink: 0; }
+.icon-btn {
   width: 44px;
   height: 44px;
   display: grid;
@@ -107,7 +108,35 @@ header h1 span {
   cursor: pointer;
   transition: transform 0.08s, box-shadow 0.08s;
 }
-.theme:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--line); }
+.icon-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--line); }
+.icon-btn[hidden] { display: none; }
+#install { background: var(--cyan); color: var(--on-color); }
+
+/* Petit écran (≤ 350 px) : titre réduit pour laisser la place aux boutons */
+@media (max-width: 350px) {
+  header h1 { font-size: 1.25rem; }
+  .icon-btn { width: 40px; height: 40px; }
+}
+
+/* Message temporaire (ex. : instructions d'installation sur iPhone) */
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: max(72px, calc(env(safe-area-inset-top) + 64px));
+  max-width: 448px;
+  margin: 0 auto;
+  z-index: 10;
+  background: var(--paper);
+  color: var(--text);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.toast[hidden] { display: none; }
 
 /* Carte du résultat principal */
 .result {

@@ -23,8 +23,16 @@
   <main class="app">
     <header>
       <h1>Genre<span>Scope</span></h1>
-      <button id="theme" class="theme" type="button" aria-label="Passer en mode nuit">☾</button>
+      <div class="actions">
+        <button id="install" class="icon-btn" type="button" aria-label="Installer l'application" title="Installer l'application" hidden>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square">
+            <path d="M12 3v12M6 10l6 6 6-6M4 21h16"/>
+          </svg>
+        </button>
+        <button id="theme" class="icon-btn" type="button" aria-label="Passer en mode nuit">☾</button>
+      </div>
     </header>
+    <div id="toast" class="toast" role="status" hidden></div>
 
     <section class="result" aria-live="polite">
       <p class="family" id="family"></p>
