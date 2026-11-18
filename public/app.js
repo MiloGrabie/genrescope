@@ -207,6 +207,11 @@ els.theme.addEventListener('click', () => {
 darkQuery.addEventListener('change', applyTheme);
 applyTheme();
 
+// Service worker : installation comme appli + fonctionnement hors ligne
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => { /* facultatif */ });
+}
+
 els.listen.addEventListener('click', () => (audio ? stop() : start()));
 document.addEventListener('visibilitychange', () => {
   // Le wake lock est libéré quand l'onglet passe en arrière-plan : on le redemande au retour.
