@@ -27,15 +27,29 @@ console.log('généré ort.wasm.min.mjs');
 const BASE = 'https://essentia.upf.edu/models/feature-extractors/discogs-effnet/';
 const exists = (p) => access(p).then(() => true, () => false);
 
+/** fetch avec délai large et plusieurs tentatives (le serveur du MTG est parfois lent à joindre). */
+async function fetchRetry(url, tries = 5) {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (err) {
+      if (i >= tries) throw new Error(`Échec du téléchargement de ${url} : ${err.cause?.code || err.message}`);
+      console.log(`tentative ${i}/${tries} échouée (${err.cause?.code || err.message}), nouvel essai dans ${i * 5} s…`);
+      await new Promise((r) => setTimeout(r, i * 5000));
+    }
+  }
+}
+
 const modelPath = join(models, 'discogs-effnet-bsdynamic-1.onnx');
 if (!(await exists(modelPath))) {
   console.log('téléchargement du modèle (~18 Mo)…');
-  const res = await fetch(BASE + 'discogs-effnet-bsdynamic-1.onnx');
-  if (!res.ok) throw new Error('Échec du téléchargement du modèle : ' + res.status);
+  const res = await fetchRetry(BASE + 'discogs-effnet-bsdynamic-1.onnx');
   await writeFile(modelPath, Buffer.from(await res.arrayBuffer()));
 }
 
-const meta = await (await fetch(BASE + 'discogs-effnet-bsdynamic-1.json')).json();
+const meta = await (await fetchRetry(BASE + 'discogs-effnet-bsdynamic-1.json')).json();
 const labels = meta.classes.map((c) => {
   const [genre, style] = c.split('---');
   return { genre, style };
