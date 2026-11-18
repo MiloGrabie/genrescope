@@ -1,6 +1,6 @@
 // Interface : capture micro, envoi au worker, lissage et affichage des styles.
 const TOP_N = 5;
-const SMOOTHING = 0.35;      // poids de la nouvelle prédiction (moyenne mobile exponentielle)
+const SMOOTHING = 0.1;       // poids de la nouvelle prédiction (moyenne mobile exponentielle) : ~10 s de mémoire
 const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
 
 // Pondération : un passage calme (break, intro) ou une analyse hésitante pèse moins.
