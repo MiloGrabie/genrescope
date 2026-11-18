@@ -145,6 +145,8 @@ header h1 span {
   border: var(--border);
   box-shadow: var(--shadow-sm);
 }
+#viz[hidden] { display: none; }
+#viz[hidden] + .listen { margin-top: auto; }
 
 /* Bouton principal */
 .listen {

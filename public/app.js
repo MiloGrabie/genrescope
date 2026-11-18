@@ -126,6 +126,7 @@ async function start() {
     els.listen.setAttribute('aria-pressed', 'true');
     els.listenLabel.textContent = 'Arrêter';
     els.status.textContent = 'Écoute… premier résultat dans ~2 s';
+    els.viz.hidden = false;
     drawViz();
   } catch (err) {
     els.status.textContent = err.name === 'NotAllowedError'
@@ -147,8 +148,7 @@ function stop() {
   els.listen.setAttribute('aria-pressed', 'false');
   els.listenLabel.textContent = 'Écouter';
   els.status.textContent = 'En pause';
-  const c = els.viz.getContext('2d');
-  c.clearRect(0, 0, els.viz.width, els.viz.height);
+  els.viz.hidden = true;
 }
 
 function drawViz() {
