@@ -3,6 +3,12 @@ const TOP_N = 5;
 const SMOOTHING = 0.35;      // poids de la nouvelle prédiction (moyenne mobile exponentielle)
 const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
 
+// Pondération : un passage calme (break, intro) ou une analyse hésitante pèse moins.
+const LOUDNESS_DECAY = 0.99;  // la référence de volume redescend de ~2,6 dB en 30 s
+const FULL_WEIGHT_DB = -6;    // à -6 dB ou plus du volume de référence : poids plein
+const ZERO_WEIGHT_DB = -15;   // à -15 dB ou moins : ignoré
+const CONFIDENT = 0.3;        // activation max à partir de laquelle la confiance est pleine
+
 const $ = (id) => document.getElementById(id);
 const els = {
   family: $('family'), style: $('style'), status: $('status'),
@@ -12,6 +18,7 @@ const els = {
 
 let labels = [];
 let smoothed = null;
+let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
 let audio = null; // { ctx, stream, node, analyser, port, raf, wakeLock }
 
 const worker = new Worker('./worker.js', { type: 'module' });
@@ -27,10 +34,15 @@ worker.onmessage = ({ data }) => {
       els.listen.disabled = false;
       break;
     case 'silence':
-      if (audio) els.status.textContent = 'Trop calme : approche le téléphone de la musique';
+      if (audio) {
+        loudnessRef *= LOUDNESS_DECAY;
+        els.status.textContent = smoothed
+          ? 'Passage calme : résultat conservé'
+          : 'Trop calme : approche le téléphone de la musique';
+      }
       break;
     case 'prediction':
-      if (audio) render(data.activations, data.ms);
+      if (audio) render(data.activations, data.rms, data.ms);
       break;
     case 'error':
       els.status.textContent = `Erreur : ${data.message}`;
@@ -41,22 +53,39 @@ worker.onmessage = ({ data }) => {
 fetch('./models/labels.json').then((r) => r.json()).then((l) => { labels = l; });
 worker.postMessage({ type: 'load' });
 
-function render(activations, ms) {
+/** Poids (0 à 1) d'une analyse selon son volume relatif et la confiance du modèle. */
+function weightOf(activations, rms) {
+  loudnessRef = Math.max(rms, loudnessRef * LOUDNESS_DECAY);
+  const db = 20 * Math.log10(rms / loudnessRef);
+  const energy = Math.min(1, Math.max(0, (db - ZERO_WEIGHT_DB) / (FULL_WEIGHT_DB - ZERO_WEIGHT_DB)));
+  let max = 0;
+  for (const v of activations) if (v > max) max = v;
+  const confidence = Math.min(1, Math.max(0.1, max / CONFIDENT));
+  return energy * confidence;
+}
+
+function render(activations, rms, ms) {
+  const weight = weightOf(activations, rms);
   if (!smoothed) smoothed = Float32Array.from(activations);
-  else for (let i = 0; i < smoothed.length; i++) smoothed[i] += SMOOTHING * (activations[i] - smoothed[i]);
+  else {
+    const alpha = SMOOTHING * weight;
+    for (let i = 0; i < smoothed.length; i++) smoothed[i] += alpha * (activations[i] - smoothed[i]);
+  }
 
   const top = Array.from(smoothed, (v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, TOP_N);
   const [bestScore, bestIdx] = top[0];
   const best = labels[bestIdx];
 
   if (bestScore < MIN_CONFIDENCE) {
-    els.family.textContent = ' ';
+    els.family.textContent = '';
     els.style.textContent = 'Incertain…';
   } else {
     els.family.textContent = best.genre;
     els.style.textContent = best.style;
   }
-  els.status.textContent = `Analyse en direct · ${ms} ms`;
+  els.status.textContent = weight < 0.25
+    ? 'Passage calme : résultat conservé'
+    : `Analyse en direct · ${ms} ms`;
 
   // Activations indépendantes (sigmoïdes) : % = confiance du modèle, barre relative au 1er.
   els.ranking.replaceChildren(...top.map(([v, i]) => {
@@ -93,6 +122,7 @@ async function start() {
 
     audio = { ctx, stream, node, analyser, wakeLock, raf: 0 };
     smoothed = null;
+    loudnessRef = 0;
     els.listen.setAttribute('aria-pressed', 'true');
     els.listenLabel.textContent = 'Arrêter';
     els.status.textContent = 'Écoute… premier résultat dans ~2 s';
@@ -133,13 +163,10 @@ function drawViz() {
     audio.analyser.getByteFrequencyData(data);
     c.clearRect(0, 0, w, h);
     const bars = 48, gap = 2 * dpr, bw = (w - gap * (bars - 1)) / bars;
-    const grad = c.createLinearGradient(0, h, 0, 0);
-    grad.addColorStop(0, '#b46bff');
-    grad.addColorStop(1, '#3fd0ff');
-    c.fillStyle = grad;
+    c.fillStyle = '#111';
     for (let i = 0; i < bars; i++) {
       const v = data[Math.floor((i / bars) ** 1.6 * data.length)] / 255;
-      const bh = Math.max(2 * dpr, v * h);
+      const bh = Math.max(3 * dpr, v * (h - 8 * dpr));
       c.fillRect(i * (bw + gap), h - bh, bw, bh);
     }
     audio.raf = requestAnimationFrame(loop);
