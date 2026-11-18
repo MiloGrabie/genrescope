@@ -1,6 +1,5 @@
 // Interface : capture micro, envoi au worker, lissage et affichage des styles.
 const TOP_N = 5;
-const SMOOTHING = 0.35;      // poids de la nouvelle prédiction (moyenne mobile exponentielle)
 const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
 
 // Pondération : un passage calme (break, intro) ou une analyse hésitante pèse moins.
@@ -18,7 +17,9 @@ const els = {
 };
 
 let labels = [];
-let smoothed = null;
+let smoothed = null; // moyenne pondérée de toutes les analyses depuis le début de l'écoute
+let sums = null;     // somme pondérée des activations
+let totalWeight = 0; // somme des poids
 let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
 let generation = 0;  // incrémenté à chaque écoute : les résultats d'une écoute précédente sont ignorés
 let audio = null;    // { ctx, stream, node, analyser, raf, wakeLock }
@@ -70,11 +71,13 @@ function weightOf(activations, rms) {
 
 function render(activations, rms, ms) {
   const weight = weightOf(activations, rms);
-  if (!smoothed) smoothed = Float32Array.from(activations);
-  else {
-    const alpha = SMOOTHING * weight;
-    for (let i = 0; i < smoothed.length; i++) smoothed[i] += alpha * (activations[i] - smoothed[i]);
-  }
+  // Moyenne pondérée sur l'ensemble de la mesure : chaque analyse compte selon son poids,
+  // sans oubli. Un passage calme (poids ~0) ne modifie presque rien.
+  if (!sums) sums = new Float64Array(activations.length);
+  for (let i = 0; i < sums.length; i++) sums[i] += weight * activations[i];
+  totalWeight += weight;
+  if (!smoothed) smoothed = new Float32Array(activations.length);
+  for (let i = 0; i < smoothed.length; i++) smoothed[i] = sums[i] / totalWeight;
 
   const top = Array.from(smoothed, (v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, TOP_N);
   const [bestScore, bestIdx] = top[0];
@@ -105,6 +108,8 @@ function render(activations, rms, ms) {
 /** Efface les résultats affichés et l'historique de lissage. */
 function resetResults() {
   smoothed = null;
+  sums = null;
+  totalWeight = 0;
   loudnessRef = 0;
   els.family.textContent = '';
   els.style.textContent = 'Écoute…';

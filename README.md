@@ -19,7 +19,7 @@ npm start       # http://localhost:5173
 micro → AudioWorklet (capture-worklet.js) → Worker (worker.js)
       → rééchantillonnage 16 kHz → normalisation du niveau
       → spectrogramme mel 128×96 (mel.js) → Discogs-EffNet (ONNX, WASM)
-      → 400 probabilités → lissage + top 5 (app.js)
+      → 400 probabilités → moyenne pondérée sur toute l'écoute + top 5 (app.js)
 ```
 
 - Une analyse par seconde, sur les ~2 dernières secondes d'audio.
