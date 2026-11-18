@@ -27,18 +27,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Modèles mis en cache entre deux déploiements : le serveur du MTG est lent (MAEST ≈ 330 Mo).
-      # Un cache par fichier : si un téléchargement échoue, rien n'est mis en cache et on réessaie au prochain.
+      # Modèle mis en cache entre deux déploiements : le serveur du MTG est lent.
+      # Si le téléchargement échoue, rien n'est mis en cache et on réessaie au prochain.
       - uses: actions/cache@v4
         with:
           path: public/models/discogs-effnet-bsdynamic-1.onnx
           key: model-discogs-effnet-bsdynamic-1
-      - uses: actions/cache@v4
-        with:
-          path: public/models/discogs-maest-5s-pw-2.onnx
-          key: model-discogs-maest-5s-pw-2
-      # --maest : modèle de test du menu caché (7 tapes sur le titre), non bloquant en cas d'échec
-      - run: npm run setup -- --maest
+      - run: npm run setup
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
