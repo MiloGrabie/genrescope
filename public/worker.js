@@ -59,16 +59,22 @@ class Resampler {
 async function loadModel() {
   const res = await fetch('./models/discogs-effnet-bsdynamic-1.onnx');
   if (!res.ok) throw new Error('Modèle introuvable (avez-vous lancé « npm run setup » ?)');
-  const total = Number(res.headers.get('Content-Length')) || 18027718;
+  // Taille réelle du modèle décompressé : Content-Length est faux si le serveur compresse (gzip).
+  const total = 18027718;
   const reader = res.body.getReader();
-  const bytes = new Uint8Array(total);
+  let bytes = new Uint8Array(total);
   let got = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (got + value.length > bytes.length) {
+      const bigger = new Uint8Array(Math.max(bytes.length * 2, got + value.length));
+      bigger.set(bytes.subarray(0, got));
+      bytes = bigger;
+    }
     bytes.set(value, got);
     got += value.length;
-    postMessage({ type: 'progress', value: got / total });
+    postMessage({ type: 'progress', value: Math.min(1, got / total) });
   }
   session = await ort.InferenceSession.create(bytes.subarray(0, got), { executionProviders: ['wasm'] });
   postMessage({ type: 'ready' });
