@@ -8,7 +8,8 @@ const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
 const LOUDNESS_DECAY = 0.99;  // la référence de volume redescend de ~2,6 dB en 30 s
 const FULL_WEIGHT_DB = -6;    // à -6 dB ou plus du volume de référence : poids plein
 const ZERO_WEIGHT_DB = -15;   // à -15 dB ou moins : ignoré
-const CONFIDENT = 0.3;        // activation max à partir de laquelle la confiance est pleine
+const HALF_LIFE_S = 45;       // une analyse perd la moitié de son poids après 45 s
+const CONFIDENT = 0.3;       // activation max à partir de laquelle la confiance est pleine
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -22,6 +23,7 @@ let labels = [];
 let smoothed = null; // moyenne pondérée de toutes les analyses depuis le début de l'écoute
 let sums = null;     // somme pondérée des activations
 let totalWeight = 0; // somme des poids
+let lastRender = 0;  // instant de la dernière analyse (pour l'estompage)
 let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
 let generation = 0;  // incrémenté à chaque écoute : les résultats d'une écoute précédente sont ignorés
 let audio = null;    // { ctx, stream, node, analyser, raf, wakeLock }
@@ -111,11 +113,16 @@ function weightOf(activations, rms) {
 
 function render(activations, rms, ms) {
   const weight = weightOf(activations, rms);
-  // Moyenne pondérée sur l'ensemble de la mesure : chaque analyse compte selon son poids,
-  // sans oubli. Un passage calme (poids ~0) ne modifie presque rien.
+  // Moyenne pondérée glissante : chaque analyse compte selon son poids, et les plus anciennes
+  // s'estompent progressivement (demi-vie HALF_LIFE_S), ce qui efface peu à peu le début d'un
+  // morceau quand on passe au suivant. Un passage calme (poids ~0) ne modifie presque rien.
+  const now = performance.now();
+  const decay = lastRender ? Math.pow(0.5, (now - lastRender) / 1000 / HALF_LIFE_S) : 1;
+  lastRender = now;
   if (!sums) sums = new Float64Array(activations.length);
-  for (let i = 0; i < sums.length; i++) sums[i] += weight * activations[i];
-  totalWeight += weight;
+  for (let i = 0; i < sums.length; i++) sums[i] = sums[i] * decay + weight * activations[i];
+  totalWeight = totalWeight * decay + weight;
+  if (totalWeight < 1e-6) return;
   if (!smoothed) smoothed = new Float32Array(activations.length);
   for (let i = 0; i < smoothed.length; i++) smoothed[i] = sums[i] / totalWeight;
 
@@ -150,6 +157,7 @@ function resetResults() {
   smoothed = null;
   sums = null;
   totalWeight = 0;
+  lastRender = 0;
   loudnessRef = 0;
   els.family.textContent = '';
   els.style.textContent = 'Écoute…';
