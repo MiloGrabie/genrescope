@@ -1,4 +1,6 @@
 // Interface : capture micro, envoi au worker, lissage et affichage des styles.
+import { MODELS, DEFAULT_MODEL, chosenModel, chooseModel } from './catalog.js';
+
 const TOP_N = 5;
 const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
 
@@ -23,6 +25,8 @@ let totalWeight = 0; // somme des poids
 let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
 let generation = 0;  // incrémenté à chaque écoute : les résultats d'une écoute précédente sont ignorés
 let audio = null;    // { ctx, stream, node, analyser, raf, wakeLock }
+const model = chosenModel();
+let windowSeconds = 2; // durée d'audio par analyse, donnée par le worker une fois le modèle chargé
 
 const worker = new Worker('./worker.js', { type: 'module' });
 worker.onmessage = ({ data }) => {
@@ -33,6 +37,7 @@ worker.onmessage = ({ data }) => {
       els.status.textContent = `Chargement du modèle… ${Math.round(data.value * 100)} %`;
       break;
     case 'ready':
+      windowSeconds = data.seconds;
       els.progress.classList.add('hidden');
       els.status.textContent = 'Appuie sur « Écouter » près d\'une source musicale';
       els.listen.disabled = false;
@@ -56,7 +61,42 @@ worker.onmessage = ({ data }) => {
 };
 
 fetch('./models/labels.json').then((r) => r.json()).then((l) => { labels = l; });
-worker.postMessage({ type: 'load' });
+worker.postMessage({ type: 'load', model });
+
+// --- Menu caché : 7 tapes rapides sur le titre → choix du modèle (pour les tests) ---
+// Le choix reste dans ce navigateur : les autres utilisateurs gardent le modèle par défaut.
+const SECRET_TAPS = 7;
+const TAP_GAP_MS = 450; // délai max entre deux tapes
+let taps = 0, lastTap = 0;
+if (model !== DEFAULT_MODEL) {
+  $('modelBadge').textContent = model.name;
+  $('modelBadge').hidden = false;
+}
+$('modelLink').textContent = model.name;
+$('title').addEventListener('click', () => {
+  const now = performance.now();
+  taps = now - lastTap < TAP_GAP_MS ? taps + 1 : 1;
+  lastTap = now;
+  if (taps >= SECRET_TAPS) { taps = 0; openModelMenu(); }
+});
+function openModelMenu() {
+  const dialog = $('modelMenu');
+  $('modelList').replaceChildren(...MODELS.map((m) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'model-choice';
+    b.setAttribute('aria-pressed', String(m === model));
+    b.append(m.name + (m === DEFAULT_MODEL ? ' (par défaut)' : ''),
+      Object.assign(document.createElement('small'), { textContent: m.note }));
+    b.addEventListener('click', () => {
+      if (m === model) { dialog.close(); return; }
+      chooseModel(m.id);
+      location.reload(); // repart d'un worker propre : libère la mémoire de l'ancien modèle
+    });
+    return b;
+  }));
+  dialog.showModal();
+}
 
 /** Poids (0 à 1) d'une analyse selon son volume relatif et la confiance du modèle. */
 function weightOf(activations, rms) {
@@ -144,7 +184,7 @@ async function start() {
     audio = { ctx, stream, node, analyser, wakeLock, raf: 0 };
     els.listen.setAttribute('aria-pressed', 'true');
     els.listenLabel.textContent = 'Arrêter';
-    els.status.textContent = 'Premier résultat dans ~2 s';
+    els.status.textContent = `Premier résultat dans ~${Math.round(windowSeconds)} s`;
     els.viz.hidden = false;
     drawViz();
   } catch (err) {
@@ -215,7 +255,7 @@ applyTheme();
 
 // --- Service worker : installation comme appli + fonctionnement hors ligne ---
 const OFFLINE_ASSETS = [
-  './models/discogs-effnet-bsdynamic-1.onnx', './models/labels.json',
+  model.file, './models/labels.json',
   './vendor/ort.wasm.min.mjs', './vendor/ort-wasm-simd.wasm',
 ];
 if ('serviceWorker' in navigator) {

@@ -1,9 +1,10 @@
-// Worker d'analyse : rééchantillonnage 16 kHz → spectrogramme mel → Discogs-EffNet (ONNX).
+// Worker d'analyse : rééchantillonnage 16 kHz → spectrogramme mel → modèle ONNX (voir catalog.js).
 import ort from './vendor/ort.wasm.min.mjs';
 import { melFrame, SR, FRAME, HOP, BANDS } from './mel.js';
 
-const PATCH = 128;                         // trames par inférence (~2,06 s)
-const WINDOW = HOP * (PATCH - 1) + FRAME;  // échantillons nécessaires à 16 kHz
+let model = null;                          // entrée de catalog.js, reçue avec le message « load »
+let PATCH = 0;                             // trames par inférence
+let WINDOW = 0;                            // échantillons nécessaires à 16 kHz
 const STEP = SR;                           // une analyse par seconde de nouvel audio
 const SILENCE_RMS = 0.003;                 // ≈ -50 dBFS
 const TARGET_RMS = 0.12;                   // niveau proche d'un morceau masterisé
@@ -14,8 +15,9 @@ ort.env.wasm.numThreads = 1; // build sans threads : mémoire non partagée, com
 ort.env.wasm.proxy = false;
 
 let session = null;
+let outputName = '';
 let resampler = null;
-const ring = new Float32Array(WINDOW);
+let ring = new Float32Array(0);
 let written = 0;      // total d'échantillons 16 kHz reçus
 let sinceLast = 0;
 let busy = false;
@@ -58,11 +60,15 @@ class Resampler {
 }
 
 // --- Chargement du modèle avec progression ---------------------------------
-async function loadModel() {
-  const res = await fetch('./models/discogs-effnet-bsdynamic-1.onnx');
-  if (!res.ok) throw new Error('Modèle introuvable (avez-vous lancé « npm run setup » ?)');
+async function loadModel(m) {
+  model = m;
+  PATCH = m.frames;
+  WINDOW = HOP * (PATCH - 1) + FRAME;
+  ring = new Float32Array(WINDOW);
+  const res = await fetch(new URL(m.file, location.href));
+  if (!res.ok) throw new Error(`Modèle ${m.name} introuvable (avez-vous lancé « npm run setup » ?)`);
   // Taille réelle du modèle décompressé : Content-Length est faux si le serveur compresse (gzip).
-  const total = 18027718;
+  const total = m.bytes;
   const reader = res.body.getReader();
   let bytes = new Uint8Array(total);
   let got = 0;
@@ -79,7 +85,12 @@ async function loadModel() {
     postMessage({ type: 'progress', value: Math.min(1, got / total) });
   }
   session = await ort.InferenceSession.create(bytes.subarray(0, got), { executionProviders: ['wasm'] });
-  postMessage({ type: 'ready' });
+  bytes = null;
+  if (!session.outputNames.includes(m.output)) {
+    throw new Error(`Sortie « ${m.output} » absente du modèle ${m.name} (${session.outputNames.join(', ')})`);
+  }
+  outputName = m.output;
+  postMessage({ type: 'ready', seconds: WINDOW / SR });
 }
 
 // --- Réception audio -------------------------------------------------------
@@ -117,12 +128,16 @@ async function analyse() {
     const mel = new Float32Array(PATCH * BANDS);
     const frame = new Float32Array(BANDS);
     for (let f = 0; f < PATCH; f++) mel.set(melFrame(x.subarray(f * HOP, f * HOP + FRAME), frame), f * BANDS);
+    if (model.norm) {
+      const { mean, scale } = model.norm;
+      for (let i = 0; i < mel.length; i++) mel[i] = (mel[i] - mean) / scale;
+    }
 
     const t0 = performance.now();
-    const out = await session.run({ melspectrogram: new ort.Tensor('float32', mel, [1, PATCH, BANDS]) });
+    const out = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', mel, [1, PATCH, BANDS]) });
     postMessage({
       type: 'prediction',
-      activations: out.activations.data,
+      activations: out[outputName].data,
       rms,
       gen,
       ms: Math.round(performance.now() - t0),
@@ -137,7 +152,7 @@ async function analyse() {
 onmessage = (e) => {
   const { type } = e.data;
   if (type === 'load') {
-    loadModel().catch((err) => postMessage({ type: 'error', message: String(err.message || err) }));
+    loadModel(e.data.model).catch((err) => postMessage({ type: 'error', message: String(err.message || err) }));
   } else if (type === 'start') {
     generation = e.data.gen;
     resampler = new Resampler(e.data.sampleRate, SR);

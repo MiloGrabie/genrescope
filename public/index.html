@@ -24,7 +24,7 @@
 <body>
   <main class="app">
     <header>
-      <h1>Genre<span>Scope</span></h1>
+      <h1 id="title">Genre<span>Scope</span><small id="modelBadge" class="model-badge" hidden></small></h1>
       <div class="actions">
         <button id="install" class="icon-btn" type="button" aria-label="Installer l'application" title="Installer l'application" hidden>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square">
@@ -35,6 +35,15 @@
       </div>
     </header>
     <div id="toast" class="toast" role="status" hidden></div>
+
+    <dialog id="modelMenu" class="model-menu" aria-labelledby="modelMenuTitle">
+      <form method="dialog">
+        <h2 id="modelMenuTitle">Modèle (test)</h2>
+        <p>Choix enregistré sur cet appareil uniquement.</p>
+        <div id="modelList" class="model-list"></div>
+        <button class="model-close" type="submit">Fermer</button>
+      </form>
+    </dialog>
 
     <section class="result" aria-live="polite">
       <p class="family" id="family"></p>
@@ -54,7 +63,7 @@
 
     <footer>
       100&nbsp;% local, aucun son envoyé<span id="offline" hidden> · fonctionne hors ligne</span> · Modèle
-      <a href="https://essentia.upf.edu/models.html" target="_blank" rel="noopener">Discogs-EffNet</a>
+      <a id="modelLink" href="https://essentia.upf.edu/models.html" target="_blank" rel="noopener">Discogs-EffNet</a>
       (MTG-UPF, CC&nbsp;BY-NC-SA)
     </footer>
   </main>
