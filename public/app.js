@@ -231,7 +231,12 @@ function drawViz() {
     audio.analyser.getByteFrequencyData(data);
     c.clearRect(0, 0, w, h);
     const bars = 48, gap = 2 * dpr, bw = (w - gap * (bars - 1)) / bars;
-    c.fillStyle = getComputedStyle(canvas).color; // suit le thème (couleur du trait)
+    // Dégradé graves → aigus avec la palette du thème (relue à chaque image : suit le mode nuit)
+    const css = getComputedStyle(document.documentElement);
+    const grad = c.createLinearGradient(0, 0, w, 0);
+    ['--cyan', '--green', '--yellow', '--pink'].forEach((v, k, all) =>
+      grad.addColorStop(k / (all.length - 1), css.getPropertyValue(v).trim()));
+    c.fillStyle = grad;
     for (let i = 0; i < bars; i++) {
       const v = data[Math.floor((i / bars) ** 1.6 * data.length)] / 255;
       const bh = Math.max(3 * dpr, v * (h - 8 * dpr));
