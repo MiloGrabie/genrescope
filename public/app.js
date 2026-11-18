@@ -1,5 +1,6 @@
 // Interface : capture micro, envoi au worker, lissage et affichage des styles.
-import { MODELS, DEFAULT_MODEL, chosenModel, chooseModel } from './catalog.js';
+import { DEFAULT_MODEL } from './catalog.js';
+import { createStack } from './history.js';
 
 const TOP_N = 5;
 const MIN_CONFIDENCE = 0.08; // en dessous : « incertain »
@@ -10,6 +11,7 @@ const FULL_WEIGHT_DB = -6;    // à -6 dB ou plus du volume de référence : poi
 const ZERO_WEIGHT_DB = -15;   // à -15 dB ou moins : ignoré
 const HALF_LIFE_S = 45;       // une analyse perd la moitié de son poids après 45 s
 const CONFIDENT = 0.3;       // activation max à partir de laquelle la confiance est pleine
+const SAVE_EVERY_MS = 5000;  // enregistrement de l'analyse en cours pendant l'écoute
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -27,8 +29,18 @@ let lastRender = 0;  // instant de la dernière analyse (pour l'estompage)
 let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
 let generation = 0;  // incrémenté à chaque écoute : les résultats d'une écoute précédente sont ignorés
 let audio = null;    // { ctx, stream, node, analyser, raf, wakeLock }
-const model = chosenModel();
+const model = DEFAULT_MODEL;
 let windowSeconds = 2; // durée d'audio par analyse, donnée par le worker une fois le modèle chargé
+let liveTop = [];      // classement en direct [{ style, genre, score }]
+let session = null;    // écoute en cours : { start, entry, lastSave }
+
+// Pile de cartes : direct + analyses enregistrées. Le classement suit la carte du dessus.
+const stack = createStack({
+  root: $('stack'),
+  liveCard: $('liveCard'),
+  onShow: (entry) => renderRanking(entry ? entry.top : liveTop),
+  onDelete: (restore) => toast('Analyse supprimée · touche ici pour annuler', restore),
+});
 
 const worker = new Worker('./worker.js', { type: 'module' });
 worker.onmessage = ({ data }) => {
@@ -65,40 +77,8 @@ worker.onmessage = ({ data }) => {
 fetch('./models/labels.json').then((r) => r.json()).then((l) => { labels = l; });
 worker.postMessage({ type: 'load', model });
 
-// --- Menu caché : 7 tapes rapides sur le titre → choix du modèle (pour les tests) ---
-// Le choix reste dans ce navigateur : les autres utilisateurs gardent le modèle par défaut.
-const SECRET_TAPS = 7;
-const TAP_GAP_MS = 450; // délai max entre deux tapes
-let taps = 0, lastTap = 0;
-if (model !== DEFAULT_MODEL) {
-  $('modelBadge').textContent = model.name;
-  $('modelBadge').hidden = false;
-}
 $('modelLink').textContent = model.name;
-$('title').addEventListener('click', () => {
-  const now = performance.now();
-  taps = now - lastTap < TAP_GAP_MS ? taps + 1 : 1;
-  lastTap = now;
-  if (taps >= SECRET_TAPS) { taps = 0; openModelMenu(); }
-});
-function openModelMenu() {
-  const dialog = $('modelMenu');
-  $('modelList').replaceChildren(...MODELS.map((m) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'model-choice';
-    b.setAttribute('aria-pressed', String(m === model));
-    b.append(m.name + (m === DEFAULT_MODEL ? ' (par défaut)' : ''),
-      Object.assign(document.createElement('small'), { textContent: m.note }));
-    b.addEventListener('click', () => {
-      if (m === model) { dialog.close(); return; }
-      chooseModel(m.id);
-      location.reload(); // repart d'un worker propre : libère la mémoire de l'ancien modèle
-    });
-    return b;
-  }));
-  dialog.showModal();
-}
+try { localStorage.removeItem('model'); } catch { /* ancien choix du menu caché, retiré */ }
 
 /** Poids (0 à 1) d'une analyse selon son volume relatif et la confiance du modèle. */
 function weightOf(activations, rms) {
@@ -141,13 +121,38 @@ function render(activations, rms, ms) {
     ? 'Passage calme : résultat conservé'
     : 'Analyse en direct';
 
-  // Activations indépendantes (sigmoïdes) : % = confiance du modèle, barre relative au 1er.
-  els.ranking.replaceChildren(...top.map(([v, i]) => {
+  liveTop = top.map(([v, i]) => ({ style: labels[i].style, genre: labels[i].genre, score: Math.round(v * 1000) / 1000 }));
+  if (stack.isLive()) renderRanking(liveTop);
+  record(bestScore >= MIN_CONFIDENCE);
+}
+
+/** Enregistre l'écoute en cours dans l'historique (créée au premier résultat sûr). */
+function record(confident) {
+  if (!session || (!session.entry && !confident)) return;
+  const now = Date.now();
+  if (!session.entry) {
+    session.entry = { id: session.start, start: session.start, end: now, top: liveTop };
+    stack.upsert(session.entry);
+    stack.setLive(session.entry.id);
+  } else if (confident) {
+    session.entry.end = now;
+    session.entry.top = liveTop;
+    stack.upsert(session.entry);
+  }
+  if (now - session.lastSave > SAVE_EVERY_MS) { session.lastSave = now; stack.save(); }
+}
+
+// Activations indépendantes (sigmoïdes) : % = confiance du modèle, barre relative au 1er.
+function renderRanking(top) {
+  const bestScore = top[0]?.score || 1;
+  els.ranking.replaceChildren(...top.map(({ style, genre, score }) => {
     const li = document.createElement('li');
-    const pct = Math.round(v * 100);
-    const width = Math.round((v / bestScore) * 100);
-    li.innerHTML = `<span class="name"></span><span class="pct">${pct} %</span><div class="bar"><div style="width:${width}%"></div></div>`;
-    li.querySelector('.name').append(labels[i].style, Object.assign(document.createElement('small'), { textContent: labels[i].genre }));
+    const pct = Math.round(score * 100);
+    const width = Math.round((score / bestScore) * 100);
+    li.innerHTML = `<span class="pct">${pct} %</span><div class="bar"><div style="width:${width}%"></div></div>`;
+    const name = Object.assign(document.createElement('span'), { className: 'name' });
+    name.append(style, Object.assign(document.createElement('small'), { textContent: genre }));
+    li.prepend(name);
     return li;
   }));
 }
@@ -161,6 +166,7 @@ function resetResults() {
   loudnessRef = 0;
   els.family.textContent = '';
   els.style.textContent = 'Écoute…';
+  liveTop = [];
   els.ranking.replaceChildren();
   $('about').hidden = true; // la description laisse la place aux résultats
 }
@@ -168,7 +174,10 @@ function resetResults() {
 async function start() {
   els.listen.disabled = true;
   generation++;
+  stack.goLive();
+  stack.setLive(null); // l'écoute précédente rejoint la pile
   resetResults();
+  session = { start: Date.now(), entry: null, lastSave: 0 };
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
@@ -196,6 +205,7 @@ async function start() {
     els.viz.hidden = false;
     drawViz();
   } catch (err) {
+    session = null;
     els.style.textContent = 'Prêt à écouter';
     els.status.textContent = err.name === 'NotAllowedError'
       ? 'Accès au micro refusé : autorise-le dans les réglages du navigateur'
@@ -215,7 +225,11 @@ function stop() {
   audio = null;
   els.listen.setAttribute('aria-pressed', 'false');
   els.listenLabel.textContent = 'Écouter';
-  els.status.textContent = 'En pause · réappuie pour analyser un autre morceau';
+  els.status.textContent = session?.entry
+    ? 'Enregistré · glisse la carte pour voir l\'historique'
+    : 'En pause · réappuie pour analyser un autre morceau';
+  stack.save();
+  session = null;
   els.viz.hidden = true;
 }
 
@@ -294,13 +308,19 @@ const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 let toastTimer = 0;
-function toast(text) {
+let toastAction = null;
+function toast(text, action = null) {
   els.toast.textContent = text;
   els.toast.hidden = false;
+  toastAction = action;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { els.toast.hidden = true; }, 7000);
+  toastTimer = setTimeout(() => { els.toast.hidden = true; toastAction = null; }, action ? 5000 : 7000);
 }
-els.toast.addEventListener('click', () => { els.toast.hidden = true; });
+els.toast.addEventListener('click', () => {
+  els.toast.hidden = true;
+  toastAction?.();
+  toastAction = null;
+});
 
 // Chrome / Edge / Android : le navigateur fournit l'invite d'installation
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -328,6 +348,7 @@ els.install.addEventListener('click', async () => {
 
 els.listen.addEventListener('click', () => (audio ? stop() : start()));
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') stack.save(); // l'appli peut être fermée sans « Arrêter »
   // Le wake lock est libéré quand l'onglet passe en arrière-plan : on le redemande au retour.
   if (audio && document.visibilityState === 'visible' && navigator.wakeLock) {
     navigator.wakeLock.request('screen').then((l) => { audio.wakeLock = l; }).catch(() => {});

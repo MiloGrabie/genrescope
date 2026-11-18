@@ -56,7 +56,7 @@ const labels = meta.classes.map((c) => {
 });
 await writeFile(join(models, 'labels.json'), JSON.stringify(labels));
 
-// Modèles de test (menu caché : 7 tapes sur le titre), seulement avec « npm run setup -- --maest ».
+// Modèles de test (à activer via DEFAULT_MODEL dans public/catalog.js), seulement avec « npm run setup -- --maest ».
 // Non bloquant : en cas d'échec, l'appli fonctionne avec le modèle par défaut.
 if (process.argv.includes('--maest')) {
   const maestPath = join(models, 'discogs-maest-5s-pw-2.onnx');
@@ -73,7 +73,7 @@ if (process.argv.includes('--maest')) {
       await writeFile(maestPath, buf);
     }
   } catch (err) {
-    console.warn(`MAEST 5 s non installé (${err.message}) : il ne sera pas utilisable dans le menu caché.`);
+    console.warn(`MAEST 5 s non installé (${err.message}) : il ne pourra pas être testé.`);
   }
 }
 console.log(`OK : ${labels.length} styles. Lancez « npm start ».`);

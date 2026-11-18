@@ -24,7 +24,7 @@
 <body>
   <main class="app">
     <header>
-      <h1 id="title">Genre<span>Scope</span><small id="modelBadge" class="model-badge" hidden></small></h1>
+      <h1 id="title">Genre<span>Scope</span></h1>
       <div class="actions">
         <button id="install" class="icon-btn" type="button" aria-label="Installer l'application" title="Installer l'application" hidden>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square">
@@ -36,22 +36,16 @@
     </header>
     <div id="toast" class="toast" role="status" hidden></div>
 
-    <dialog id="modelMenu" class="model-menu" aria-labelledby="modelMenuTitle">
-      <form method="dialog">
-        <h2 id="modelMenuTitle">Modèle (test)</h2>
-        <p>Choix enregistré sur cet appareil uniquement.</p>
-        <div id="modelList" class="model-list"></div>
-        <button class="model-close" type="submit">Fermer</button>
-      </form>
-    </dialog>
 
-    <section class="result" aria-live="polite">
-      <p class="family" id="family"></p>
+    <div class="stack" id="stack" tabindex="0" role="region" aria-label="Analyses : glisse ou touche la carte pour voir l'historique">
+    <section class="result" id="liveCard" aria-live="polite">
+      <div class="card-top"><p class="family" id="family"></p><span class="count"></span></div>
       <p class="style" id="style">Prêt à écouter</p>
       <p class="about" id="about">Détecte en direct le style de la musique que ton téléphone entend, parmi 400 sous-genres. Même un morceau inconnu : pas besoin qu'il soit référencé.</p>
       <p class="status" id="status">Chargement du modèle…</p>
       <div class="progress" id="progress"><div id="progressBar"></div></div>
     </section>
+    </div>
 
     <ol class="ranking" id="ranking"></ol>
 

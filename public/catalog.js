@@ -1,6 +1,5 @@
-// Catalogue des modèles. Le premier est celui de tout le monde ; les autres ne sont
-// accessibles que par le menu caché (7 tapes rapides sur le titre), choix mémorisé
-// dans le navigateur uniquement : les autres utilisateurs ne sont pas affectés.
+// Catalogue des modèles. L'appli utilise DEFAULT_MODEL ; pour en tester un autre,
+// change DEFAULT_MODEL ci-dessous.
 // Tous partagent la même entrée (mel 96 bandes de mel.js) et les 400 styles de labels.json.
 export const MODELS = [
   {
@@ -26,13 +25,3 @@ export const MODELS = [
 ];
 
 export const DEFAULT_MODEL = MODELS[0];
-const KEY = 'model';
-
-export function chosenModel() {
-  try { return MODELS.find((m) => m.id === localStorage.getItem(KEY)) || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; }
-}
-export function chooseModel(id) {
-  try {
-    if (id === DEFAULT_MODEL.id) localStorage.removeItem(KEY); else localStorage.setItem(KEY, id);
-  } catch { /* stockage indisponible */ }
-}
