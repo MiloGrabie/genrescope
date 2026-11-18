@@ -1,6 +1,7 @@
 // Test hors navigateur : synthétise un beat « house » 125 BPM et vérifie les prédictions.
 import * as ort from 'onnxruntime-web';
 import { readFile } from 'fs/promises';
+ort.env.wasm.numThreads = 1;
 import { melFrame, FRAME, HOP, BANDS, SR } from '../public/mel.js';
 
 const labels = JSON.parse(await readFile(new URL('../public/models/labels.json', import.meta.url)));

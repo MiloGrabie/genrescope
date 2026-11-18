@@ -212,7 +212,7 @@ applyTheme();
 // --- Service worker : installation comme appli + fonctionnement hors ligne ---
 const OFFLINE_ASSETS = [
   './models/discogs-effnet-bsdynamic-1.onnx', './models/labels.json',
-  './vendor/ort.wasm.min.mjs', './vendor/ort-wasm-simd-threaded.mjs', './vendor/ort-wasm-simd-threaded.wasm',
+  './vendor/ort.wasm.min.mjs', './vendor/ort-wasm-simd.wasm',
 ];
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* facultatif */ });
@@ -225,7 +225,7 @@ function cacheForOffline() {
     reg.active?.postMessage({ type: 'cache-assets', urls });
     for (let i = 0; i < 20; i++) {
       try {
-        const cache = await caches.open('genrescope-assets-v1');
+        const cache = await caches.open('genrescope-assets-v2');
         const hits = await Promise.all(urls.map((u) => cache.match(u)));
         if (hits.every(Boolean)) { $('offline').hidden = false; return; }
       } catch { return; }

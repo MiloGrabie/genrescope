@@ -1,5 +1,5 @@
 // Worker d'analyse : rééchantillonnage 16 kHz → spectrogramme mel → Discogs-EffNet (ONNX).
-import * as ort from './vendor/ort.wasm.min.mjs';
+import ort from './vendor/ort.wasm.min.mjs';
 import { melFrame, SR, FRAME, HOP, BANDS } from './mel.js';
 
 const PATCH = 128;                         // trames par inférence (~2,06 s)
@@ -10,7 +10,8 @@ const TARGET_RMS = 0.12;                   // niveau proche d'un morceau masteri
 const MAX_GAIN = 40;
 
 ort.env.wasm.wasmPaths = new URL('./vendor/', import.meta.url).href;
-ort.env.wasm.numThreads = 1; // le multithread exige l'isolation cross-origin
+ort.env.wasm.numThreads = 1; // build sans threads : mémoire non partagée, compatible iOS
+ort.env.wasm.proxy = false;
 
 let session = null;
 let resampler = null;
