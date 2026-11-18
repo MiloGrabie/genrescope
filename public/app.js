@@ -14,15 +14,18 @@ const els = {
   family: $('family'), style: $('style'), status: $('status'),
   progress: $('progress'), progressBar: $('progressBar'),
   ranking: $('ranking'), viz: $('viz'), listen: $('listen'), listenLabel: $('listenLabel'),
+  theme: $('theme'),
 };
 
 let labels = [];
 let smoothed = null;
 let loudnessRef = 0; // volume de référence du morceau (pic avec décroissance lente)
-let audio = null; // { ctx, stream, node, analyser, port, raf, wakeLock }
+let generation = 0;  // incrémenté à chaque écoute : les résultats d'une écoute précédente sont ignorés
+let audio = null;    // { ctx, stream, node, analyser, raf, wakeLock }
 
 const worker = new Worker('./worker.js', { type: 'module' });
 worker.onmessage = ({ data }) => {
+  if ('gen' in data && data.gen !== generation) return;
   switch (data.type) {
     case 'progress':
       els.progressBar.style.width = `${Math.round(data.value * 100)}%`;
@@ -98,8 +101,19 @@ function render(activations, rms, ms) {
   }));
 }
 
+/** Efface les résultats affichés et l'historique de lissage. */
+function resetResults() {
+  smoothed = null;
+  loudnessRef = 0;
+  els.family.textContent = '';
+  els.style.textContent = 'Écoute…';
+  els.ranking.replaceChildren();
+}
+
 async function start() {
   els.listen.disabled = true;
+  generation++;
+  resetResults();
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
@@ -115,20 +129,19 @@ async function start() {
 
     const { port1, port2 } = new MessageChannel();
     node.port.postMessage({ port: port1 }, [port1]);
-    worker.postMessage({ type: 'start', sampleRate: ctx.sampleRate, port: port2 }, [port2]);
+    worker.postMessage({ type: 'start', sampleRate: ctx.sampleRate, port: port2, gen: generation }, [port2]);
 
     let wakeLock = null;
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* facultatif */ }
 
     audio = { ctx, stream, node, analyser, wakeLock, raf: 0 };
-    smoothed = null;
-    loudnessRef = 0;
     els.listen.setAttribute('aria-pressed', 'true');
     els.listenLabel.textContent = 'Arrêter';
-    els.status.textContent = 'Écoute… premier résultat dans ~2 s';
+    els.status.textContent = 'Premier résultat dans ~2 s';
     els.viz.hidden = false;
     drawViz();
   } catch (err) {
+    els.style.textContent = 'Prêt à écouter';
     els.status.textContent = err.name === 'NotAllowedError'
       ? 'Accès au micro refusé : autorise-le dans les réglages du navigateur'
       : `Impossible d'accéder au micro : ${err.message}`;
@@ -147,7 +160,7 @@ function stop() {
   audio = null;
   els.listen.setAttribute('aria-pressed', 'false');
   els.listenLabel.textContent = 'Écouter';
-  els.status.textContent = 'En pause';
+  els.status.textContent = 'En pause · réappuie pour analyser un autre morceau';
   els.viz.hidden = true;
 }
 
@@ -163,7 +176,7 @@ function drawViz() {
     audio.analyser.getByteFrequencyData(data);
     c.clearRect(0, 0, w, h);
     const bars = 48, gap = 2 * dpr, bw = (w - gap * (bars - 1)) / bars;
-    c.fillStyle = '#111';
+    c.fillStyle = getComputedStyle(canvas).color; // suit le thème (couleur du trait)
     for (let i = 0; i < bars; i++) {
       const v = data[Math.floor((i / bars) ** 1.6 * data.length)] / 255;
       const bh = Math.max(3 * dpr, v * (h - 8 * dpr));
@@ -173,6 +186,26 @@ function drawViz() {
   };
   loop();
 }
+
+// --- Thème clair / sombre ---------------------------------------------------
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+function currentTheme() {
+  return document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+}
+function applyTheme() {
+  const theme = currentTheme();
+  els.theme.setAttribute('aria-label', theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode nuit');
+  els.theme.textContent = theme === 'dark' ? '☀' : '☾';
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#16151c' : '#fff4e0';
+}
+els.theme.addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch { /* stockage indisponible */ }
+  applyTheme();
+});
+darkQuery.addEventListener('change', applyTheme);
+applyTheme();
 
 els.listen.addEventListener('click', () => (audio ? stop() : start()));
 document.addEventListener('visibilitychange', () => {

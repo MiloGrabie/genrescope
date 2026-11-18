@@ -18,6 +18,7 @@ const ring = new Float32Array(WINDOW);
 let written = 0;      // total d'échantillons 16 kHz reçus
 let sinceLast = 0;
 let busy = false;
+let generation = 0;   // identifiant de la session d'écoute, pour ignorer les résultats d'une écoute précédente
 
 // --- Rééchantillonneur sinc fenêtré (streaming) ---------------------------
 class Resampler {
@@ -93,6 +94,7 @@ function push(samples) {
 
 async function analyse() {
   busy = true;
+  const gen = generation;
   try {
     // Fenêtre linéaire des ~2 dernières secondes
     const x = new Float32Array(WINDOW);
@@ -104,7 +106,7 @@ async function analyse() {
     for (let i = 0; i < WINDOW; i++) sum += x[i] * x[i];
     const rms = Math.sqrt(sum / WINDOW);
     if (rms < SILENCE_RMS) {
-      postMessage({ type: 'silence', rms });
+      postMessage({ type: 'silence', rms, gen });
       return;
     }
     // Normalisation du niveau : le micro capte bien plus bas qu'un fichier masterisé
@@ -121,6 +123,7 @@ async function analyse() {
       type: 'prediction',
       activations: out.activations.data,
       rms,
+      gen,
       ms: Math.round(performance.now() - t0),
     });
   } catch (err) {
@@ -135,7 +138,9 @@ onmessage = (e) => {
   if (type === 'load') {
     loadModel().catch((err) => postMessage({ type: 'error', message: String(err.message || err) }));
   } else if (type === 'start') {
+    generation = e.data.gen;
     resampler = new Resampler(e.data.sampleRate, SR);
+    ring.fill(0);
     written = 0;
     sinceLast = 0;
     e.data.port.onmessage = (m) => push(resampler.process(m.data));
