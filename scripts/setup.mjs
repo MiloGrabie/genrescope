@@ -67,7 +67,7 @@ if (process.argv.includes('--maest')) {
     if (await complete(maestPath)) { /* déjà là */ }
     else if (await complete(local)) { await copyFile(local, maestPath); console.log('copié MAEST 5 s depuis bench/models'); }
     else {
-      console.log('téléchargement de MAEST 5 s (~250 Mo)…');
+      console.log('téléchargement de MAEST 5 s (~330 Mo)…');
       const buf = await fetchRetry('https://essentia.upf.edu/models/feature-extractors/maest/discogs-maest-5s-pw-2.onnx', 3, 15 * 60_000);
       if (buf.length !== FULL) throw new Error(`taille inattendue (${buf.length} octets)`);
       await writeFile(maestPath, buf);
