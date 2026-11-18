@@ -2,7 +2,7 @@
 // - Fichiers de l'appli (HTML/JS/CSS) : réseau d'abord, pour toujours avoir la dernière version.
 // - Modèle et moteur ONNX (~30 Mo, ne changent pas) : cache d'abord, téléchargés une seule fois.
 // - Polices Google : servies depuis le cache, mises à jour en arrière-plan.
-const APP_CACHE = 'genrescope-app-v3';
+const APP_CACHE = 'genrescope-app-v4';
 const ASSET_CACHE = 'genrescope-assets-v2'; // v2 : ONNX Runtime 1.18 (build sans threads)
 const FONT_CACHE = 'genrescope-fonts-v1';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'worker.js', 'mel.js', 'capture-worklet.js',

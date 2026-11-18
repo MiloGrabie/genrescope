@@ -14,22 +14,7 @@
   color-scheme: light;
 }
 
-/* Mode nuit : automatique selon le système, ou forcé via le bouton */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16151c;
-    --text: #f5efe2;
-    --line: #f5efe2;
-    --paper: #24232d;
-    --track: #16151c;
-    --yellow: #f5c518;
-    --pink: #ff5c93;
-    --cyan: #2fd3f5;
-    --green: #5ef070;
-    --disabled: #4a4955;
-    color-scheme: dark;
-  }
-}
+/* Mode nuit : uniquement si l'utilisateur l'active avec le bouton (clair par défaut) */
 :root[data-theme="dark"] {
   --bg: #16151c;
   --text: #f5efe2;

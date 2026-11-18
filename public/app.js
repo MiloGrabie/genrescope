@@ -190,9 +190,9 @@ function drawViz() {
 }
 
 // --- Thème clair / sombre ---------------------------------------------------
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+// Clair par défaut, quel que soit le réglage du système ; le choix du bouton est mémorisé.
 function currentTheme() {
-  return document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light');
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 function applyTheme() {
   const theme = currentTheme();
@@ -206,7 +206,6 @@ els.theme.addEventListener('click', () => {
   try { localStorage.setItem('theme', next); } catch { /* stockage indisponible */ }
   applyTheme();
 });
-darkQuery.addEventListener('change', applyTheme);
 applyTheme();
 
 // --- Service worker : installation comme appli + fonctionnement hors ligne ---
